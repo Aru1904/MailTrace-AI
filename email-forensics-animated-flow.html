@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Email Forensic Pipeline — Animated Walkthrough</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+  :root{
+    --bg:#0d1016; --panel:#151923; --line:#262c38;
+    --accent:#2f8f92; --accent-soft:#1c3d3e;
+    --safe:#1b8457; --safe-glow:#6fd6a3;
+    --risk:#c4362b; --risk-glow:#ef7a70;
+    --amber:#e0b34c;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--bg);color:#e7eaf0;font-family:'Inter',sans-serif;}
+  .shell{max-width:1180px;margin:0 auto;padding:28px 22px 60px;}
+  h1{font-size:1.3rem;font-weight:600;margin:0 0 4px;letter-spacing:-0.01em;}
+  .sub{color:#8891a3;font-size:0.86rem;margin:0 0 20px;}
+
+  /* progress rail */
+  .rail{display:flex;align-items:center;gap:0;margin-bottom:10px;}
+  .node{
+    flex:1;text-align:center;font-family:'IBM Plex Mono',monospace;font-size:0.62rem;
+    color:#4a5164;padding-bottom:10px;border-bottom:3px solid #232833;
+    transition:color .3s ease, border-color .3s ease;
+  }
+  .node.active{color:var(--accent);border-color:var(--accent);}
+  .node.done{color:#5b6478;border-color:#3a4150;}
+
+  .caption{
+    font-size:1.02rem;font-weight:500;margin:18px 0 18px;min-height:1.4em;color:#f1f3f7;
+  }
+  .caption .hl{color:var(--accent);font-weight:600;}
+
+  /* controls */
+  .controls{display:flex;align-items:center;gap:10px;margin-bottom:22px;flex-wrap:wrap;}
+  button.ctl{
+    background:var(--panel);border:1px solid var(--line);color:#c6cbd6;
+    font-family:'Inter',sans-serif;font-size:0.8rem;font-weight:500;
+    padding:8px 14px;border-radius:7px;cursor:pointer;
+  }
+  button.ctl.primary{background:var(--accent);border-color:var(--accent);color:#fff;}
+  button.ctl:hover{border-color:#3a4150;}
+  .step-count{font-family:'IBM Plex Mono',monospace;font-size:0.72rem;color:#6c7688;margin-left:auto;}
+
+  /* stage grid */
+  .stage{display:grid;grid-template-columns:1fr 1fr;gap:18px;}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden;}
+  .card-head{
+    padding:10px 16px;border-bottom:1px solid var(--line);
+    font-family:'IBM Plex Mono',monospace;font-size:0.68rem;color:#8891a3;
+    display:flex;justify-content:space-between;align-items:center;
+  }
+  .dot-live{width:6px;height:6px;border-radius:50%;background:#3a4150;}
+  .dot-live.on{background:var(--safe-glow);box-shadow:0 0 6px var(--safe-glow);}
+
+  /* left: mini gmail */
+  .gmail-mini{background:#f6f8fc;color:#202124;font-family:'Inter',sans-serif;min-height:420px;}
+  .gm-top{background:#fff;padding:9px 14px;border-bottom:1px solid #e2e5ea;font-size:0.78rem;color:#5f6368;font-weight:600;}
+  .gm-list{min-height:120px;}
+  .gm-row{
+    display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid #e2e5ea;font-size:0.78rem;
+    opacity:0; transform:translateY(-8px); transition:opacity .5s ease, transform .5s ease;
+  }
+  .gm-row.in{opacity:1;transform:translateY(0);}
+  .gm-av{width:24px;height:24px;border-radius:50%;background:#c4362b;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:0.62rem;font-weight:700;color:#fff;}
+  .gm-sender{width:120px;font-weight:700;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .gm-subj{flex:1;color:#5f6368;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .gm-badge{
+    font-family:'IBM Plex Mono',monospace;font-size:0.6rem;font-weight:700;padding:2px 6px;border-radius:4px;
+    opacity:0; transform:scale(.7); transition:opacity .35s ease, transform .35s ease; flex-shrink:0;
+  }
+  .gm-badge.show{opacity:1;transform:scale(1);background:#fbe9e7;color:var(--risk);}
+
+  .gm-open{padding:18px;font-size:0.8rem;}
+  .gm-banner{
+    border-radius:8px;padding:12px 14px;display:flex;gap:12px;align-items:center;
+    max-height:0; opacity:0; overflow:hidden; transition:max-height .5s ease, opacity .4s ease, padding .5s ease;
+  }
+  .gm-banner.show{max-height:100px;opacity:1;padding:12px 14px;background:#fbe9e7;border:1px solid #f3c6c0;}
+  .gm-banner .ic{width:26px;height:26px;border-radius:50%;background:var(--risk);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.85rem;flex-shrink:0;}
+  .gm-banner b{display:block;font-size:0.8rem;color:#7a2119;}
+  .gm-banner span{font-size:0.7rem;color:#4b4b4b;}
+
+  /* right: backend */
+  .backend{min-height:420px;display:flex;flex-direction:column;}
+  .pipe-mini{display:flex;padding:14px 16px 6px;gap:6px;}
+  .pnode{
+    flex:1;text-align:center;font-family:'IBM Plex Mono',monospace;font-size:0.6rem;color:#4a5164;
+    padding:7px 4px;border:1px solid #232833;border-radius:6px;transition:all .3s ease;
+  }
+  .pnode.active{color:#fff;border-color:var(--accent);background:var(--accent-soft);box-shadow:0 0 10px rgba(47,143,146,.4);}
+  .pnode.done{color:#6fd6a3;border-color:#1e3b30;}
+  .pnode.sim{border-style:dashed;}
+  .pnode.sim.active{border-color:var(--amber);background:rgba(224,179,76,0.1);color:#e0b34c;box-shadow:0 0 10px rgba(224,179,76,.3);}
+  .pnode.sim.done{color:#c9a860;border-color:#4a3d20;}
+  .sim-badge{
+    display:inline-block; font-family:'IBM Plex Mono',monospace; font-size:0.62rem; font-weight:600;
+    color:#e0b34c; background:rgba(224,179,76,0.12); border:1px solid #5a4a24;
+    padding:2px 7px; border-radius:4px; margin-left:8px; vertical-align:middle;
+  }
+
+  .term{
+    flex:1;margin:10px 16px 16px;background:#0a0c11;border:1px solid #1e232d;border-radius:8px;
+    padding:12px 14px;font-family:'IBM Plex Mono',monospace;font-size:0.72rem;line-height:1.8;
+    overflow-y:auto; color:#9aa4b5;
+  }
+  .term .ln{opacity:0; animation:fadein .35s ease forwards;}
+  @keyframes fadein{ to{opacity:1;} }
+  .term .k{color:#6c7688;}
+  .term .ok{color:#6fd6a3;}
+  .term .bad{color:#ef7a70;}
+  .term .warn{color:var(--amber);}
+  .term .accent{color:#4fb8bb;}
+
+  @media (max-width:840px){ .stage{grid-template-columns:1fr;} .rail{flex-wrap:wrap;} }
+</style>
+</head>
+<body>
+<div class="shell">
+  <h1>Email Forensic Pipeline — Animated Walkthrough</h1>
+  <p class="sub">Play through, then screen-record this page (OBS / built-in recorder) for your video. Each step is timed for narration.</p>
+
+  <div class="rail" id="rail"></div>
+  <div class="caption" id="caption"></div>
+
+  <div class="controls">
+    <button class="ctl primary" id="playBtn">▶ Play</button>
+    <button class="ctl" id="prevBtn">◀ Prev</button>
+    <button class="ctl" id="nextBtn">Next ▶</button>
+    <button class="ctl" id="replayBtn">↺ Replay</button>
+    <span class="step-count" id="stepCount"></span>
+  </div>
+
+  <div class="stage">
+    <div class="card">
+      <div class="card-head"><span>GMAIL — mail.google.com</span><span class="dot-live" id="gmDot"></span></div>
+      <div class="gmail-mini">
+        <div class="gm-top">Inbox</div>
+        <div class="gm-list">
+          <div class="gm-row" id="gmRow">
+            <div class="gm-av">PP</div>
+            <div class="gm-sender">"PayPal Security"</div>
+            <div class="gm-subj">Your account has been limited</div>
+            <div class="gm-badge" id="gmBadge">HIGH RISK</div>
+          </div>
+        </div>
+        <div class="gm-open">
+          <div class="gm-banner" id="gmBanner">
+            <div class="ic">✕</div>
+            <div>
+              <b>High-risk fraud detected — score 91/100</b>
+              <span>DMARC failed · homoglyph domain · unauthorized origin</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><span>BACKEND — forensic-engine</span><span class="dot-live" id="beDot"></span></div>
+      <div class="backend">
+        <div class="pipe-mini" id="pipeMini">
+          <div class="pnode" data-i="0">Ingest</div>
+          <div class="pnode" data-i="1">Auth</div>
+          <div class="pnode" data-i="2">Origin</div>
+          <div class="pnode" data-i="3">NLP</div>
+          <div class="pnode" data-i="4">Score</div>
+          <div class="pnode" data-i="5">Chain</div>
+          <div class="pnode sim" data-i="6">Graph</div>
+          <div class="pnode" data-i="7">Serve</div>
+        </div>
+        <div class="term" id="term"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const steps = [
+  {
+    label: "Email arrives",
+    caption: 'An email lands in the user\'s <span class="hl">Gmail inbox</span>.',
+    pipeNode: null,
+    gmail: () => { document.getElementById('gmRow').classList.add('in'); },
+    log: [
+      { t:'k', text:'# nothing to do yet — waiting on Gmail push notification' }
+    ]
+  },
+  {
+    label: "Webhook fires",
+    caption: 'Gmail\'s <span class="hl">Pub/Sub push subscription</span> notifies the backend instantly.',
+    pipeNode: 0,
+    gmail: () => {},
+    log: [
+      { t:'accent', text:'POST /webhook/gmail' },
+      { t:'k', text:'{ "historyId": "48213", "emailAddress": "user@gmail.com" }' },
+      { t:'ok', text:'✓ ack 200 — enqueued for processing' }
+    ]
+  },
+  {
+    label: "Raw fetch",
+    caption: 'Backend calls the <span class="hl">Gmail API</span> to pull the full raw message.',
+    pipeNode: 0,
+    gmail: () => {},
+    log: [
+      { t:'accent', text:'GET gmail.users.messages.get(id=..., format="raw")' },
+      { t:'k', text:'→ message-id: MSG-84AE21F' },
+      { t:'k', text:'→ from: "PayPal Security" <security-alert@paypa1-support.com>' },
+      { t:'ok', text:'✓ raw RFC 5322 headers + body retrieved' }
+    ]
+  },
+  {
+    label: "Auth check",
+    caption: 'Validating <span class="hl">SPF / DKIM / DMARC</span> against the claimed sending domain.',
+    pipeNode: 1,
+    gmail: () => {},
+    log: [
+      { t:'k', text:'spf.check(domain="paypa1-support.com", ip="185.220.101.47")' },
+      { t:'bad', text:'✕ SPF: fail — IP not authorized' },
+      { t:'bad', text:'✕ DKIM: fail — signature invalid' },
+      { t:'bad', text:'✕ DMARC: fail (policy p=reject not honored)' }
+    ]
+  },
+  {
+    label: "Origin trace",
+    caption: 'Resolving the true <span class="hl">originating IP</span> via the Received header chain.',
+    pipeNode: 2,
+    gmail: () => {},
+    log: [
+      { t:'k', text:'trace_hops(received_headers) → first external hop' },
+      { t:'warn', text:'⚠ 185.220.101.47 — DigitalOcean, Frankfurt DE' },
+      { t:'k', text:'geoip2.lookup(185.220.101.47)' },
+      { t:'warn', text:'⚠ known hosting-provider IP, no rDNS, not a PayPal ASN' }
+    ]
+  },
+  {
+    label: "Content scan",
+    caption: 'Subject and body run through the <span class="hl">phishing / BEC classifier</span>.',
+    pipeNode: 3,
+    gmail: () => {},
+    log: [
+      { t:'k', text:'nlp_model.classify(subject, body)' },
+      { t:'warn', text:'⚠ urgency_score: 0.88' },
+      { t:'warn', text:'⚠ brand_impersonation: "PayPal" detected, domain mismatch' },
+      { t:'k', text:'⚠ display-name / envelope-domain mismatch' },
+      { t:'accent', text:'mitre_map(indicators) → T1566.002, T1585' }
+    ]
+  },
+  {
+    label: "Score & store",
+    caption: 'Signals fused into a <span class="hl">risk score</span> and saved to the database.',
+    pipeNode: 4,
+    gmail: () => {},
+    log: [
+      { t:'accent', text:'fuse_score(auth=0, origin=0.9, nlp=0.88) → 91' },
+      { t:'bad', text:'✕ verdict: HIGH_RISK' },
+      { t:'ok', text:'✓ INSERT INTO verdicts (message_id, score, status) — MSG-84AE21F, 91, HIGH_RISK' }
+    ]
+  },
+  {
+    label: "Chain anchor",
+    caption: 'Dossier fingerprint written to the <span class="hl">blockchain</span> for tamper-evident evidence.',
+    pipeNode: 5,
+    gmail: () => {},
+    log: [
+      { t:'k', text:'evidence_hash = sha256(canonical(dossier)) → 9f2a1e...c04b' },
+      { t:'k', text:'signature = ECDSA.sign(platform_privkey, evidence_hash) → 0x4c8e2f...19ab' },
+      { t:'accent', text:'contract.anchorEvidence("MSG-84AE21F", evidence_hash, signature)' },
+      { t:'ok', text:'✓ tx confirmed — block #48213, immutable record set' }
+    ]
+  },
+  {
+    label: "Attribution graph",
+    caption: 'Sender/IP/domain linked in <span class="hl">Neo4j</span> against prior cases. <span class="sim-badge">SIMULATED — SEEDED DATASET</span>',
+    pipeNode: 6,
+    gmail: () => {},
+    log: [
+      { t:'k', text:'graph.merge(sender, ip, asn, domain) -> case cluster' },
+      { t:'warn', text:'⚠ infrastructure match: 185.220.101.47 linked to 4 prior phishing incidents (48h)' },
+      { t:'k', text:'# note: demo graph seeded with 8-10 constructed cases, not live feed' }
+    ]
+  },
+  {
+    label: "Badge shown",
+    caption: 'Extension polls the verdict endpoint — badge appears <span class="hl">inside Gmail</span>, in real time.',
+    pipeNode: 7,
+    gmail: () => {
+      document.getElementById('gmBadge').classList.add('show');
+      document.getElementById('gmBanner').classList.add('show');
+    },
+    log: [
+      { t:'accent', text:'GET /api/v1/verdict/MSG-84AE21F' },
+      { t:'ok', text:'✓ 200 — { "status": "HIGH_RISK", "score": 91 }' },
+      { t:'ok', text:'✓ badge + banner injected into Gmail DOM' }
+    ]
+  }
+];
+
+const rail = document.getElementById('rail');
+steps.forEach((s,i)=>{
+  const d = document.createElement('div');
+  d.className = 'node';
+  d.textContent = (i+1) + '. ' + s.label;
+  d.dataset.i = i;
+  rail.appendChild(d);
+});
+
+let current = -1;
+let playing = false;
+let timer = null;
+
+function resetVisuals(){
+  document.getElementById('gmRow').classList.remove('in');
+  document.getElementById('gmBadge').classList.remove('show');
+  document.getElementById('gmBanner').classList.remove('show');
+  document.querySelectorAll('.pnode').forEach(n=>n.classList.remove('active','done'));
+  document.querySelectorAll('.rail .node').forEach(n=>n.classList.remove('active','done'));
+  document.getElementById('term').innerHTML = '';
+  document.getElementById('gmDot').classList.remove('on');
+  document.getElementById('beDot').classList.remove('on');
+}
+
+function renderStep(i){
+  const s = steps[i];
+  document.getElementById('caption').innerHTML = s.caption;
+  document.getElementById('stepCount').textContent = 'Step ' + (i+1) + ' / ' + steps.length;
+
+  document.querySelectorAll('.rail .node').forEach((n,idx)=>{
+    n.classList.toggle('active', idx===i);
+    n.classList.toggle('done', idx<i);
+  });
+
+  document.querySelectorAll('.pnode').forEach(n=>{
+    const idx = parseInt(n.dataset.i);
+    n.classList.toggle('active', s.pipeNode!==null && idx===s.pipeNode);
+    n.classList.toggle('done', s.pipeNode!==null && idx<s.pipeNode);
+  });
+
+  document.getElementById('beDot').classList.toggle('on', s.pipeNode!==null);
+  document.getElementById('gmDot').classList.toggle('on', s.pipeNode===null || i===steps.length-1);
+
+  s.gmail();
+
+  const term = document.getElementById('term');
+  term.innerHTML = '';
+  s.log.forEach((line, idx)=>{
+    const el = document.createElement('div');
+    el.className = 'ln ' + line.t;
+    el.style.animationDelay = (idx*0.18)+'s';
+    el.textContent = line.text;
+    term.appendChild(el);
+  });
+}
+
+function goTo(i){
+  if(i<0 || i>=steps.length) return;
+  current = i;
+  renderStep(current);
+}
+
+function playLoop(){
+  if(!playing) return;
+  if(current >= steps.length-1){ playing=false; document.getElementById('playBtn').textContent='▶ Play'; return; }
+  goTo(current+1);
+  timer = setTimeout(playLoop, 2600);
+}
+
+document.getElementById('playBtn').addEventListener('click', ()=>{
+  playing = !playing;
+  document.getElementById('playBtn').textContent = playing ? '⏸ Pause' : '▶ Play';
+  if(playing){
+    if(current>=steps.length-1){ resetVisuals(); current=-1; }
+    playLoop();
+  } else {
+    clearTimeout(timer);
+  }
+});
+document.getElementById('nextBtn').addEventListener('click', ()=>{ clearTimeout(timer); playing=false; document.getElementById('playBtn').textContent='▶ Play'; goTo(current+1); });
+document.getElementById('prevBtn').addEventListener('click', ()=>{ clearTimeout(timer); playing=false; document.getElementById('playBtn').textContent='▶ Play'; goTo(Math.max(0,current-1)); });
+document.getElementById('replayBtn').addEventListener('click', ()=>{ clearTimeout(timer); playing=false; document.getElementById('playBtn').textContent='▶ Play'; resetVisuals(); current=-1; goTo(0); });
+
+resetVisuals();
+goTo(0);
+</script>
+</body>
+</html>
